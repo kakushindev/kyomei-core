@@ -1,0 +1,89 @@
+# Builds and checks the landing page and its Docker image on every change to it. Publishes
+# nothing and deploys nothing: the operator builds and runs the image on the server
+# (docs/DEPLOYMENT.md). Separate from the app release pipeline on purpose; the page reads
+# releases from the public GitHub API at runtime.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/website.yml"
+  pull_request:
+    paths:
+      - "website/**"
+      - ".github/workflows/website.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: Lint, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: website
+    env:
+      PUBLIC_SITE_URL: ${{ vars.WEBSITE_URL || 'https://kyomei.kakushin.dev' }}
+      PUBLIC_GITHUB_REPO: ${{ vars.WEBSITE_GITHUB_REPO || github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: website/.nvmrc
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint, type-check, unit tests, build, check dist
+        run: npm run verify
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: website-dist
+          path: website/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  image:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build -t kyomei-web:ci \
+            --build-arg PUBLIC_SITE_URL="${{ vars.WEBSITE_URL || 'https://kyomei.kakushin.dev' }}" \
+            --build-arg PUBLIC_GITHUB_REPO="${{ vars.WEBSITE_GITHUB_REPO || github.repository }}" \
+            website
+
+      - name: nginx configuration test
+        run: docker run --rm kyomei-web:ci nginx -t
+
+      - name: Run like production and check responses
+        run: |
+          docker run -d --name kyomei-web -p 127.0.0.1:8080:8080 \
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true kyomei-web:ci
+          for _ in $(seq 1 20); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null && break; sleep 1; done
+          website/scripts/smoke-test.sh http://127.0.0.1:8080
+
+      - name: Container logs
+        if: always()
+        run: docker logs kyomei-web 2>&1 | tail -50 || true

@@ -1,0 +1,240 @@
+@import "tailwindcss";
+
+/* Kakushin family palette and type. WHITE SPACE inverts ink and paper. */
+@theme {
+  --font-display: "Cabin Sketch", "Patrick Hand", "Comic Sans MS", cursive;
+  --font-body: "Patrick Hand", "Segoe Print", "Comic Sans MS", cursive, sans-serif;
+  --font-jp: "Zen Kurenaido", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", serif;
+}
+
+/* Only the two Zen Kurenaido slices that hold 共 and 鳴 are shipped. */
+@font-face {
+  font-family: "Zen Kurenaido";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/zen-kurenaido/files/zen-kurenaido-110-400-normal.woff2") format("woff2");
+  unicode-range: U+5171;
+}
+@font-face {
+  font-family: "Zen Kurenaido";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../node_modules/@fontsource/zen-kurenaido/files/zen-kurenaido-90-400-normal.woff2") format("woff2");
+  unicode-range: U+9CF4;
+}
+
+@layer base {
+:root {
+  --bg: #000;
+  --fg: #fff;
+  --select: #053d7c;
+  --ink: #c8102e;
+  --dim: #9ca3af;
+  --line: rgb(255 255 255 / 0.85);
+  color-scheme: dark;
+  --cursor-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 3 L5.6 19.2 L9.8 15.3 L12.9 21 L15.7 19.6 L12.8 14 L18.6 13.3 Z' fill='%23fff' stroke='%23000' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") 5 3, auto;
+  --cursor-point: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 3 L5.6 19.2 L9.8 15.3 L12.9 21 L15.7 19.6 L12.8 14 L18.6 13.3 Z' fill='%23c8102e' stroke='%23000' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") 5 3, pointer;
+}
+
+html[data-space="white"] {
+  --bg: #fff;
+  --fg: #000;
+  --line: rgb(0 0 0 / 0.85);
+  --dim: #4b5563;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+  cursor: var(--cursor-arrow);
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-body);
+  font-size: clamp(1.125rem, 1rem + 0.45vw, 1.3rem);
+  line-height: 1.55;
+  overflow-x: hidden;
+}
+
+a, button, [role="tab"], .stamp, .opt-toggle, summary { cursor: var(--cursor-point); }
+a { color: inherit; }
+::selection { background: var(--select); color: #fff; }
+:focus-visible { outline: 2px dashed var(--fg); outline-offset: 3px; }
+
+}
+
+@layer components {
+.skip-link {
+  position: absolute; left: 1rem; top: -4rem; z-index: 50;
+  background: var(--select); color: #fff; padding: 0.4rem 0.9rem;
+}
+.skip-link:focus { top: 1rem; }
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.kanji { font-family: var(--font-jp); }
+.dim { color: var(--dim); }
+.caps { text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* ── Sketch surfaces ─────────────────────────────────────────
+   Every .sketch gets a Rough.js drawing (see scripts/sketch.ts). Until it is drawn, or without
+   JavaScript, a plain border stands in so the layout never depends on the script. */
+.sketch { position: relative; isolation: isolate; }
+.sketch:not([data-drawn]) { outline: 2px solid var(--line); outline-offset: -2px; }
+.sketch > .sketch-ink {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none; z-index: -1; color: var(--line);
+}
+
+/* ── Typewriter (RPG dialogue reveal) ───────────────────────── */
+.type { position: relative; display: inline-block; max-width: 100%; white-space: nowrap; }
+.type-spacer { visibility: hidden; }
+.type-text {
+  position: absolute; inset: 0 auto 0 0; width: 100%; overflow: hidden; white-space: nowrap;
+  animation: type var(--type-duration, 0.9s) steps(var(--chars, 20), end) both;
+}
+@keyframes type { from { width: 0; } to { width: 100%; } }
+
+/* ── Seal ───────────────────────────────────────────────────── */
+.stamp {
+  position: relative; flex: none; aspect-ratio: 1; user-select: none;
+  width: clamp(5rem, 13vw, 6.75rem);
+  transform: rotate(-6deg);
+  transition: transform 0.15s steps(2, end);
+  container-type: inline-size;
+  background: none; border: 0; padding: 0; color: inherit;
+}
+.stamp:hover { transform: rotate(-3deg) scale(1.04); }
+.stamp:active { transform: rotate(-8deg) scale(0.97); }
+.stamp-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.stamp-kanji {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--font-jp); font-size: 38cqw; line-height: 1.02; writing-mode: vertical-rl;
+  color: var(--ink);
+  text-shadow: 0 0 2px var(--bg), 0 0 2px var(--bg), 1px 1px 0 var(--bg), -1px -1px 0 var(--bg);
+}
+
+/* ── RPG menus: selection bar plus a pointing hand ──────────── */
+.menu { position: relative; }
+.menu-item {
+  display: inline-block; text-decoration: none; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 0.1rem 0.7rem 0.15rem; border: 2px solid transparent; color: inherit; background: none;
+  font: inherit; text-align: left;
+}
+.menu-item:hover, .menu-item:focus-visible, .menu-item[aria-selected="true"] {
+  background: var(--select); color: #fff; outline: none;
+}
+.menu-item:focus-visible { border-style: dashed; border-color: currentColor; }
+.menu-item:active { transform: translate(1px, 1px); }
+.hand {
+  position: absolute; left: 0; top: 0; width: 2.1rem; height: 2.1rem; opacity: 0; pointer-events: none;
+  overflow: visible; color: var(--fg);
+  transform: translate(var(--hand-x, 0px), var(--hand-y, 0px));
+  transition: transform 0.14s steps(3, end), opacity 0.2s;
+}
+.menu.is-active .hand { opacity: 1; animation: nudge 0.5s linear infinite alternate; }
+@keyframes nudge { from { margin-left: 0; } to { margin-left: -6px; } }
+
+/* ── Dialogue box ───────────────────────────────────────────── */
+.dialogue { position: relative; padding-top: 0.9em; }
+.speaker {
+  position: absolute; top: 0; left: 1.4rem; z-index: 2; margin: 0;
+  background: var(--bg); color: var(--fg); font: inherit; font-size: 0.92em; font-weight: 400;
+  letter-spacing: 0.14em; text-transform: uppercase; padding: 0.05rem 0.75rem 0.1rem;
+  box-shadow: 0 0 0 1px var(--fg), inset 0 0 0 1px var(--bg), inset 0 0 0 3px var(--fg);
+}
+.box { padding: 1.6rem 1.6rem 2rem; }
+.continue {
+  position: absolute; right: 1.1rem; bottom: 0.5rem; font-size: 0.8em;
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink { to { visibility: hidden; } }
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none;
+  letter-spacing: 0.08em; text-transform: uppercase; padding: 0.55rem 1.15rem 0.6rem;
+  color: inherit; background: transparent; border: 0; font: inherit;
+}
+.btn-primary { color: #fff; }
+.btn-primary::before {
+  content: ""; position: absolute; inset: 4px; background: var(--select); z-index: -2;
+}
+.btn:hover .btn-arrow { transform: translateX(3px); }
+.btn-arrow { transition: transform 0.15s steps(2, end); }
+.btn[aria-disabled="true"] { opacity: 0.6; }
+
+/* Small mono-ish value text (checksums, versions) that stays readable. */
+.value { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.78em; word-break: break-all; }
+
+/* ── Header ─────────────────────────────────────────────────── */
+.site-header {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+/* ── Resonance drawings ─────────────────────────────────────── */
+.resonance { color: var(--fg); }
+.resonance .ring { transform-origin: center; transform-box: fill-box; }
+@media (prefers-reduced-motion: no-preference) {
+  .resonance.is-live .ring { animation: breathe 3.2s ease-in-out infinite; }
+  .resonance.is-live .ring:nth-of-type(2) { animation-delay: 0.4s; }
+  .resonance.is-live .ring:nth-of-type(3) { animation-delay: 0.8s; }
+  .resonance.is-live .ring:nth-of-type(4) { animation-delay: 1.2s; }
+}
+@keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+/* ── Showcase frame ─────────────────────────────────────────── */
+.shot { display: block; width: 100%; height: auto; border-radius: 6px; }
+html[data-space="white"] .shot-dark { display: none; }
+html:not([data-space="white"]) .shot-light { display: none; }
+
+/* Toggle switch drawn as a sketch pill. */
+.opt-toggle {
+  position: relative; width: 3.2rem; height: 1.6rem; border: 0; padding: 0; background: none; color: inherit;
+}
+.opt-toggle .knob {
+  position: absolute; top: 0.3rem; left: 0.35rem; width: 1rem; height: 1rem; border-radius: 50%;
+  background: var(--dim); transition: transform 0.15s steps(3, end), background 0.15s;
+}
+.opt-toggle[aria-checked="true"] .knob { transform: translateX(1.5rem); background: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .type-text, .menu.is-active .hand, .continue { animation: none; }
+  .hand, .stamp, .opt-toggle .knob, .btn-arrow { transition: none; }
+}
+
+/* Rules fall back to a double line rather than a box outline. */
+[data-sketch="rule"]:not([data-drawn]) { outline: none; border-top: 4px double var(--line); }
+/* The hand's solid fill follows the page colour (Rough.js writes a fixed fill colour). */
+.hand path[stroke="none"] { fill: var(--bg); }
+.btn.sketch { position: relative; }
+
+/* Cabin Sketch has no Ō (and browsers fall back for the whole O + U+0304 cluster), so the macron
+   is drawn: two slightly crooked strokes, like the rest of the lettering. */
+.macron { position: relative; display: inline-block; }
+.macron::before, .macron::after {
+  content: ""; position: absolute; left: 16%; right: 14%; top: -0.06em; height: 0.075em;
+  background: currentColor; border-radius: 0.04em; transform: rotate(-2.5deg);
+}
+.macron::after { top: -0.015em; left: 22%; right: 20%; height: 0.035em; opacity: 0.7; transform: rotate(1.5deg); }
+.macron-low::before { top: 0.18em; }
+.macron-low::after { top: 0.235em; }
+}

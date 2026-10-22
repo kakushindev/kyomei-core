@@ -1,0 +1,56 @@
+# Tests and builds the macOS app on every push and pull request. Never publishes anything.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["website/**", "deploy/**", "docs/**", "**/*.md"]
+  pull_request:
+    paths-ignore: ["website/**", "deploy/**", "docs/**", "**/*.md"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Test and build Kyomei.app
+    # macOS 26 image: the app compiles against the macOS 26 SDK (Liquid Glass APIs behind
+    # #available), so Xcode 26 or newer is required even though it runs on macOS 14+.
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          sdk="$(xcrun --sdk macosx --show-sdk-version)"
+          echo "macOS SDK $sdk"
+          [[ "${sdk%%.*}" -ge 26 ]] || { echo "::error::macOS 26 SDK or newer required, found $sdk"; exit 1; }
+
+      - name: Protocol tests
+        run: swift test
+
+      - name: Build app bundle (universal, ad hoc signed)
+        run: KYOMEI_BUILD="${{ github.run_number }}" ./scripts/build-app.sh
+
+      - name: Verify app bundle
+        run: ./scripts/verify-app.sh build/Kyomei.app "$(tr -d '[:space:]' < VERSION)"
+
+      - name: Package and verify DMG
+        run: ./scripts/package-dmg.sh build/Kyomei.app build/dist
+
+      - name: Upload CI build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kyomei-ci-${{ github.sha }}
+          path: build/dist/
+          retention-days: 7
+          if-no-files-found: error

@@ -1,0 +1,10 @@
+node_modules
+dist
+.astro
+og
+compose.yaml
+Dockerfile
+.dockerignore
+.env*
+*.log
+.DS_Store

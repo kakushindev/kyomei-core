@@ -1,0 +1,73 @@
+---
+// Real screens: rendered from Kyōmei's own SwiftUI views by the app's snapshot tool
+// (SOUNDCORE_SNAPSHOT_SOLID=1). See docs/SCREENSHOTS.md to regenerate them.
+const screens = [
+  {
+    id: 'menubar', label: 'Menu bar', width: 320, height: 366,
+    caption: 'Battery for each bud and the case, sound mode and EQ, one click from the menu bar.',
+  },
+  {
+    id: 'overview', label: 'Overview', width: 759, height: 859,
+    caption: 'The resonance stage shows the current mode: rings close in for noise cancelling and open out for transparency.',
+  },
+  {
+    id: 'soundmodes', label: 'Sound modes', width: 759, height: 485,
+    caption: 'Adaptive, manual 1 to 5 or scene-based noise cancelling, wind noise reduction and transparency, as your model allows.',
+  },
+  {
+    id: 'equalizer', label: 'Equalizer', width: 759, height: 758,
+    caption: 'Eight bands you can drag, the Soundcore presets and your own saved curves.',
+  },
+  {
+    id: 'controls', label: 'Touch controls', width: 757, height: 322,
+    caption: 'Remap single, double, triple tap and press and hold on each bud, or restore the defaults.',
+  },
+  {
+    id: 'widget', label: 'Desktop widget', width: 170, height: 170,
+    caption: 'A desktop widget with battery rings; the larger size adds one-click sound mode buttons.',
+  },
+];
+---
+<section id="experience" class="mx-auto max-w-6xl px-5 py-16" aria-labelledby="experience-title">
+  <h2 id="experience-title" class="wordmark mb-2 text-[clamp(2.2rem,1.5rem+3vw,3.5rem)]">Experience</h2>
+  <p class="dim mb-10 max-w-2xl">Pick a screen. These are the app's real views, not mockups.</p>
+
+  <div class="grid gap-10 md:grid-cols-[16rem_1fr]">
+    <div class="menu" data-menu>
+      <svg class="hand" viewBox="0 0 32 32" aria-hidden="true" data-hand></svg>
+      <div role="tablist" aria-label="App screens" aria-orientation="vertical" class="flex flex-col items-start gap-1 pl-10" data-tablist>
+        {screens.map((s, i) => (
+          <button
+            type="button" role="tab" class="menu-item text-lg" id={`tab-${s.id}`}
+            aria-controls={`panel-${s.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}
+            data-menu-item data-caption={s.caption}
+          >{s.label}</button>
+        ))}
+      </div>
+    </div>
+
+    <div>
+      {screens.map((s, i) => (
+        <div role="tabpanel" id={`panel-${s.id}`} aria-labelledby={`tab-${s.id}`} hidden={i !== 0} class="flex justify-center">
+          <div class="sketch p-4" data-sketch="double" style={`max-width: ${Math.min(s.width + 40, 640)}px; width: 100%;`}>
+            <img class="shot shot-dark" src={`/screens/${s.id}-dark.png`} width={s.width} height={s.height}
+              alt={`Kyōmei ${s.label.toLowerCase()} in dark appearance`} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" />
+            <img class="shot shot-light" src={`/screens/${s.id}-light.png`} width={s.width} height={s.height}
+              alt={`Kyōmei ${s.label.toLowerCase()} in light appearance`} loading="lazy" decoding="async" />
+          </div>
+        </div>
+      ))}
+      <div class="dialogue mt-8">
+        <p class="speaker" aria-hidden="true">Kyōmei</p>
+        <div class="box sketch" data-sketch="box">
+          <p class="m-0 min-h-[3em]" aria-live="polite" data-caption-target>{screens[0].caption}</p>
+          <span class="continue" aria-hidden="true">▼</span>
+        </div>
+      </div>
+      <p class="dim mt-4 text-[0.85em]">
+        Rendered from the app's SwiftUI views on macOS 27 with a sample R60i NC state. On a real Mac the
+        panels sit on Liquid Glass (macOS 26 and later) or translucent materials (macOS 14 and 15).
+      </p>
+    </div>
+  </div>
+</section>

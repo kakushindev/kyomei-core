@@ -1,0 +1,28 @@
+# Swift
+.build/
+build/
+.swiftpm/
+*.xcodeproj/
+DerivedData/
+
+# Release outputs and signing material (never commit certificates or keys)
+dist/
+*.dmg
+*.dmg.sha256
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.keychain-db
+.env
+.env.*
+
+# Website
+website/node_modules/
+website/dist/
+website/.astro/
+
+# Local tooling
+.claude/
+.DS_Store
+*.log

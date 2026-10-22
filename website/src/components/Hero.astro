@@ -1,0 +1,56 @@
+---
+import { site, links } from '../site';
+---
+<section id="top" class="mx-auto max-w-6xl px-5 pt-10 pb-16 md:pt-16" aria-labelledby="hero-title">
+  <div class="grid items-center gap-10 md:grid-cols-[1.15fr_1fr]">
+    <div>
+      <div class="flex items-end justify-between gap-6">
+        <div>
+          <h1 id="hero-title" class="wordmark text-[clamp(3.4rem,2rem+8vw,7rem)]" aria-label={site.name}><span aria-hidden="true">KY<span class="macron">O</span>MEI</span></h1>
+          <p class="caps mt-3 text-[clamp(1rem,0.8rem+1.2vw,1.45rem)]" aria-label={site.tagline}>
+            <span class="type" data-typewrite={site.tagline.toUpperCase()}>{site.tagline.toUpperCase()}</span>
+          </p>
+        </div>
+        <button type="button" class="stamp" aria-label={`${site.kanji}, ${site.kanjiReading}. Press to re-ink the seal.`} title={site.kanjiReading} data-stamp>
+          <svg class="stamp-ink" viewBox="0 0 100 100" aria-hidden="true" data-stamp-ink>
+            <rect x="9" y="9" width="82" height="82" fill="none" stroke="#c8102e" stroke-width="3" />
+          </svg>
+          <span class="stamp-kanji" lang="ja" aria-hidden="true">{site.kanji}</span>
+        </button>
+      </div>
+
+      <div class="sketch my-7 h-3" data-sketch="rule" data-reroll="off" aria-hidden="true"></div>
+
+      <p class="max-w-xl text-[1.15em]">
+        A native macOS app for Soundcore earbuds and headphones. Noise cancelling, equalizer,
+        touch controls and battery, from your menu bar. No phone in between.
+      </p>
+
+      <div class="mt-8 flex flex-wrap items-center gap-4">
+        <a class="btn btn-primary sketch text-lg" data-sketch="box" href={links.releases} data-download-cta data-blip>
+          <span data-cta-label>Download for macOS</span><span class="btn-arrow" aria-hidden="true">→</span>
+        </a>
+        <a class="btn sketch text-lg" data-sketch="box" href={links.repository} rel="noopener" data-blip>
+          View on GitHub<span class="btn-arrow" aria-hidden="true">↗</span>
+        </a>
+      </div>
+      <p class="dim mt-4 text-[0.9em]" aria-live="polite">
+        <span data-release-inline>{site.minimumMacOS} or later · Apple silicon and Intel</span>
+      </p>
+    </div>
+
+    <figure class="m-0" aria-label="Illustration: earbuds and a Mac connected by resonance rings">
+      <svg class="resonance w-full" viewBox="0 0 440 300" role="img" aria-hidden="true" data-art="resonance">
+        <!-- Static stand-in, replaced by a hand-drawn version at runtime. -->
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="110" cy="150" r="34" />
+          <path d="M190 150 a80 80 0 0 0 -40 -69" />
+          <path d="M230 150 a120 120 0 0 0 -60 -104" />
+          <rect x="270" y="95" width="140" height="92" rx="6" />
+          <path d="M250 200 h180 l-12 14 h-156 z" />
+        </g>
+      </svg>
+      <figcaption class="dim text-center text-[0.85em]">two things, ringing together</figcaption>
+    </figure>
+  </div>
+</section>

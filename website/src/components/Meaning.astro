@@ -1,0 +1,26 @@
+---
+import { site } from '../site';
+---
+<section id="meaning" class="mx-auto max-w-6xl px-5 py-16" aria-labelledby="meaning-title">
+  <div class="grid items-center gap-10 md:grid-cols-[1fr_1.2fr]">
+    <svg class="resonance w-full max-w-md justify-self-center" viewBox="0 0 360 260" role="img"
+      aria-label="Two sets of rings overlapping, like two sounds resonating" data-art="meaning">
+      <g fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="130" cy="130" r="40" /><circle cx="130" cy="130" r="80" />
+        <circle cx="230" cy="130" r="40" /><circle cx="230" cy="130" r="80" />
+      </g>
+    </svg>
+    <div>
+      <h2 id="meaning-title" class="wordmark mb-6 text-[clamp(2.2rem,1.5rem+3vw,3.5rem)]">
+        The meaning of <span class="kanji" lang="ja" style="color: var(--ink); font-weight: 400">{site.kanji}</span>
+      </h2>
+      <dl class="m-0 mb-6 grid grid-cols-[auto_1fr] items-baseline gap-x-5 gap-y-2">
+        <dt class="kanji text-4xl" lang="ja">共</dt><dd class="m-0"><span class="caps">kyō</span> <span class="dim">· together, shared</span></dd>
+        <dt class="kanji text-4xl" lang="ja">鳴</dt><dd class="m-0"><span class="caps">mei</span> <span class="dim">· to ring, to sound</span></dd>
+      </dl>
+      <p>Kyōmei means resonance: two things that ring together. When one vibrates, the other answers.</p>
+      <p>That is the idea behind the app. Your Mac and your earbuds should be tuned to each other directly,
+        not through a phone you have to pick up first.</p>
+    </div>
+  </div>
+</section>

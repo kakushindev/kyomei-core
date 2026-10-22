@@ -1,0 +1,223 @@
+# Tag vX.Y.Z → test → build → (sign → notarize) → DMG → verify → GitHub Release.
+#
+# The release is created as a draft, every asset is checked after upload, and only then is it
+# published. A failure at any step leaves at most an unpublished draft, never a half release.
+# See docs/RELEASING.md for secrets and the signing setup.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and package
+    runs-on: macos-26
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signing: ${{ steps.status.outputs.signing }}
+    steps:
+      - name: Validate tag
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Tag '$tag' is not vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag matches VERSION and the checked-out commit
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$file_version" != "$VERSION" ]]; then
+            echo "::error::VERSION file says $file_version but the tag is v$VERSION. Bump VERSION in a commit, then tag that commit."
+            exit 1
+          fi
+          [[ "$(git rev-parse HEAD)" == "$(git rev-list -n 1 "$GITHUB_REF_NAME")" ]] || { echo "::error::checkout does not match tag"; exit 1; }
+
+      - name: Refuse to replace an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::A release for $GITHUB_REF_NAME already exists. Delete it deliberately or tag a new version."
+            exit 1
+          fi
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          sdk="$(xcrun --sdk macosx --show-sdk-version)"
+          [[ "${sdk%%.*}" -ge 26 ]] || { echo "::error::macOS 26 SDK or newer required, found $sdk"; exit 1; }
+
+      - name: Protocol tests
+        run: swift test
+
+      - name: Import Developer ID certificate (when configured)
+        id: signing
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+        run: |
+          if [[ -z "$CERTIFICATE_P12" || -z "$CERTIFICATE_PASSWORD" || -z "$SIGNING_IDENTITY" ]]; then
+            echo "No signing certificate configured: building an ad hoc signed (unsigned for Gatekeeper) release."
+            echo "identity=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/kyomei-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          print -r -- "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security find-identity -v -p codesigning "$keychain" | grep -F "$SIGNING_IDENTITY" >/dev/null \
+            || { echo "::error::Identity '$SIGNING_IDENTITY' not found in the imported certificate"; exit 1; }
+          echo "identity=$SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+        shell: zsh {0}
+
+      - name: Build app bundle (universal)
+        env:
+          KYOMEI_VERSION: ${{ steps.version.outputs.version }}
+          KYOMEI_BUILD: ${{ github.run_number }}
+          CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: ./scripts/build-app.sh
+
+      - name: Verify app bundle
+        run: ./scripts/verify-app.sh build/Kyomei.app "${{ steps.version.outputs.version }}"
+
+      - name: Package and verify DMG
+        env:
+          CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: ./scripts/package-dmg.sh build/Kyomei.app build/dist
+
+      - name: Notarize (when configured)
+        id: notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dmg="build/dist/Kyomei-$VERSION-macOS.dmg"
+          if [[ -z "$IDENTITY" || -z "$APPLE_ID" || -z "$APPLE_TEAM_ID" || -z "$APPLE_APP_PASSWORD" ]]; then
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+            echo "Notarization skipped (needs a Developer ID signature and notary credentials)."
+            exit 0
+          fi
+          ./scripts/notarize.sh "$dmg"
+          # Stapling changes the image, so the checksum is computed again.
+          (cd build/dist && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
+          echo "notarized=true" >> "$GITHUB_OUTPUT"
+
+      - name: Final verification
+        id: status
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+          NOTARIZED: ${{ steps.notarize.outputs.notarized }}
+        run: |
+          dmg="build/dist/Kyomei-$VERSION-macOS.dmg"
+          (cd build/dist && shasum -a 256 -c "$(basename "$dmg").sha256")
+          hdiutil verify "$dmg"
+          mnt="$(mktemp -d)"
+          hdiutil attach "$dmg" -readonly -nobrowse -noautoopen -mountpoint "$mnt" -quiet
+          ./scripts/verify-app.sh "$mnt/Kyomei.app" "$VERSION"
+          if [[ "$NOTARIZED" == "true" ]]; then
+            spctl --assess --type execute --verbose=2 "$mnt/Kyomei.app"
+            signing="notarized"
+          elif [[ -n "$IDENTITY" ]]; then
+            signing="signed"
+          else
+            signing="unsigned"
+          fi
+          hdiutil detach "$mnt" -quiet
+          echo "signing=$signing" >> "$GITHUB_OUTPUT"
+          echo "Release signing status: $signing"
+
+      - name: Release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGNING: ${{ steps.status.outputs.signing }}
+        run: ./scripts/release-notes.sh "v$VERSION" "$SIGNING" "build/dist/Kyomei-$VERSION-macOS.dmg" > build/dist/RELEASE_NOTES.md
+
+      - name: Remove temporary keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/kyomei-signing.keychain-db" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kyomei-release
+          path: build/dist/
+          retention-days: 14
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release and upload assets; nothing else
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: kyomei-release
+          path: dist
+
+      - name: Check artifacts
+        working-directory: dist
+        run: |
+          dmg="Kyomei-$VERSION-macOS.dmg"
+          test -s "$dmg" && test -s "$dmg.sha256" && test -s RELEASE_NOTES.md
+          sha256sum -c "$dmg.sha256"
+
+      - name: Create draft release and upload
+        working-directory: dist
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag \
+            --title "Kyōmei $VERSION" \
+            --notes-file RELEASE_NOTES.md \
+            "Kyomei-$VERSION-macOS.dmg" "Kyomei-$VERSION-macOS.dmg.sha256"
+
+      - name: Verify uploaded assets, then publish
+        working-directory: dist
+        run: |
+          dmg="Kyomei-$VERSION-macOS.dmg"
+          expected="$(stat -c %s "$dmg")"
+          uploaded="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq ".assets[] | select(.name == \"$dmg\") | .size")"
+          if [[ "$uploaded" != "$expected" ]]; then
+            echo "::error::Uploaded $dmg is $uploaded bytes, expected $expected. Leaving the release as a draft."
+            exit 1
+          fi
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"

@@ -1,0 +1,68 @@
+---
+import { site, links } from '../site';
+---
+<section id="download" class="mx-auto max-w-6xl px-5 py-16" aria-labelledby="download-title">
+  <h2 id="download-title" class="wordmark mb-2 text-[clamp(2.2rem,1.5rem+3vw,3.5rem)]">Download</h2>
+  <p class="dim mb-10 max-w-2xl">
+    Every build comes from GitHub Releases, made by the release pipeline from a tagged commit.
+    This page asks GitHub for the latest stable release each time it loads.
+  </p>
+
+  <div class="grid gap-10 md:grid-cols-[1.25fr_1fr]">
+    <div class="dialogue" data-release-panel data-api={links.latestReleaseApi} data-releases={links.releases}>
+      <p class="speaker" aria-hidden="true">Latest stable release</p>
+      <div class="box sketch" data-sketch="double">
+        <p class="m-0 mb-4" aria-live="polite" data-release-status>
+          Asking GitHub for the latest release…
+        </p>
+        <dl class="m-0 mb-6 grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5" hidden data-release-facts>
+          <dt class="dim">Version</dt><dd class="m-0" data-release-version></dd>
+          <dt class="dim">Published</dt><dd class="m-0" data-release-date></dd>
+          <dt class="dim">Size</dt><dd class="m-0" data-release-size></dd>
+          <dt class="dim">Runs on</dt><dd class="m-0" data-release-arch></dd>
+          <dt class="dim">Signature</dt><dd class="m-0"><span data-release-signing></span><br /><span class="dim text-[0.85em]" data-release-signing-detail></span></dd>
+          <dt class="dim">SHA-256</dt>
+          <dd class="m-0">
+            <span class="value" data-release-sha></span>
+            <button type="button" class="menu-item ml-1 text-[0.8em]" hidden data-copy-sha>Copy</button>
+          </dd>
+        </dl>
+        <div class="flex flex-wrap items-center gap-4" data-release-buttons>
+          <a class="btn btn-primary sketch" data-sketch="box" href={links.releases} rel="noopener" data-blip>
+            Open GitHub Releases<span class="btn-arrow" aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <p class="mt-5 mb-0 text-[0.9em]">
+          <a href={links.releases} rel="noopener" data-release-notes>Release notes</a>
+          <span class="dim"> · </span>
+          <a href={links.releases} rel="noopener">All releases</a>
+        </p>
+        <span class="continue" aria-hidden="true">▼</span>
+      </div>
+      <p class="dim mt-3 text-[0.8em]">“Latest stable” is GitHub's latest release that is neither a draft nor a pre-release.</p>
+    </div>
+
+    <div class="space-y-8">
+      <div>
+        <h3 class="caps mb-3 text-lg">System requirements</h3>
+        <ul class="m-0 list-none space-y-1.5 p-0">
+          <li><span style="color: var(--ink)" aria-hidden="true">◆ </span>{site.minimumMacOS} (14) or later</li>
+          <li><span style="color: var(--ink)" aria-hidden="true">◆ </span>Apple silicon or Intel (universal app)</li>
+          <li><span style="color: var(--ink)" aria-hidden="true">◆ </span>Bluetooth, with your Soundcore device paired in System Settings</li>
+          <li><span style="color: var(--ink)" aria-hidden="true">◆ </span>Desktop widgets need macOS 14; Liquid Glass styling appears on macOS 26 and later</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="caps mb-3 text-lg">Install</h3>
+        <ol class="m-0 space-y-1.5 pl-6">
+          <li>Open the disk image and drag <strong class="font-normal caps">Kyomei</strong> to Applications.</li>
+          <li>Open Kyōmei. If the release is not notarized, macOS stops the first launch: open <em>System Settings → Privacy &amp; Security</em> and choose <em>Open Anyway</em> for Kyōmei.
+            That allows this app only; there is no need to turn Gatekeeper off.</li>
+          <li>Allow Bluetooth access when asked.</li>
+          <li>Optional: add the widget from the desktop (right-click the wallpaper → Edit Widgets).</li>
+        </ol>
+        <p class="dim mt-3 text-[0.85em]">Check a download with <span class="value">shasum -a 256 -c Kyomei-X.Y.Z-macOS.dmg.sha256</span>.</p>
+      </div>
+    </div>
+  </div>
+</section>

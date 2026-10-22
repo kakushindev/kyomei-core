@@ -1,0 +1,23 @@
+# Runs the Kyōmei landing page on the server. From the website/ directory:
+#   docker compose up -d --build
+# The port is published on loopback only: the existing Cloudflare Tunnel reaches it at
+# http://127.0.0.1:8080, and nothing is opened to the internet. See docs/DEPLOYMENT.md.
+services:
+  web:
+    build:
+      context: .
+      args:
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://kyomei.kakushin.dev}
+        PUBLIC_GITHUB_REPO: ${PUBLIC_GITHUB_REPO:-kakushindev/kyomei-core}
+    image: kyomei-web:${KYOMEI_WEB_TAG:-latest}
+    container_name: kyomei-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${KYOMEI_WEB_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

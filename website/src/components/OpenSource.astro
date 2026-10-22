@@ -1,0 +1,22 @@
+---
+import { site, links } from '../site';
+---
+<section id="open-source" class="mx-auto max-w-4xl px-5 py-16" aria-labelledby="oss-speaker">
+  <div class="dialogue">
+    <h2 class="speaker" id="oss-speaker">Kakushin</h2>
+    <div class="box sketch" data-sketch="double">
+      <p>Kyōmei is built in the open by <a href={site.organization.url} rel="noopener">Kakushin</a> (革新), a small
+        open-source organization that redraws defaults. This one redraws the idea that your earbuds' settings live on your phone.</p>
+      <p>The protocol layer stands on the reverse-engineering work of <a href={links.openscq30} rel="noopener">OpenSCQ30</a>,
+        and Kyōmei is released under the same license, <a href={links.license} rel="noopener">{site.license}</a>.</p>
+      <p class="mb-0">Found a bug, own a model we have not tested, or want to help? The door is open.</p>
+      <span class="continue" aria-hidden="true">▼</span>
+    </div>
+  </div>
+  <ul class="mt-8 flex list-none flex-wrap gap-x-8 gap-y-3 p-0">
+    <li><a class="menu-item" href={links.repository} rel="noopener" data-blip>Repository ↗</a></li>
+    <li><a class="menu-item" href={links.issues} rel="noopener" data-blip>Issues ↗</a></li>
+    <li><a class="menu-item" href={links.contributing} rel="noopener" data-blip>Contributing ↗</a></li>
+    <li><a class="menu-item" href={site.organization.github} rel="noopener" data-blip>Kakushin on GitHub ↗</a></li>
+  </ul>
+</section>

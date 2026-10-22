@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Kyōmei</title>
+  <rect width="64" height="64" rx="14" fill="#000"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <circle cx="24" cy="34" r="7" stroke-width="3.5"/>
+    <path d="M36 22.5c4 3 6.2 7 6.2 11.5S40 42.5 36 45.5" stroke-width="3.2"/>
+    <path d="M42.5 15.5c6 4.6 9.2 11 9.2 18.5s-3.2 13.9-9.2 18.5" stroke-width="2.8"/>
+  </g>
+  <rect x="44.5" y="44.5" width="13" height="13" rx="1.5" fill="none" stroke="#c8102e" stroke-width="2.6" transform="rotate(-7 51 51)"/>
+</svg>

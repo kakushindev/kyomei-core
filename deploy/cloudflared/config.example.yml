@@ -1,0 +1,30 @@
+# EXAMPLE ONLY. Do not create a new tunnel and do not commit real values.
+#
+# Kyōmei reuses the Cloudflare Tunnel that already runs on the web server. The site itself is the
+# kyomei-web container (website/compose.yaml), published on the host at 127.0.0.1:8080. Add the one ingress
+# rule below to that tunnel's EXISTING configuration, above its catch-all, and keep every rule
+# that is already there. The <PLACEHOLDERS> stand for values that live only on the server.
+#
+# Locally-managed tunnel (this file is /etc/cloudflared/config.yml):
+#   1. Add the kyomei rule, then check it:  cloudflared tunnel ingress validate
+#                                           cloudflared tunnel ingress rule https://kyomei.kakushin.dev
+#   2. Route DNS once:                      cloudflared tunnel route dns <TUNNEL-NAME> kyomei.kakushin.dev
+#   3. Restart:                             sudo systemctl restart cloudflared
+#
+# Remotely-managed tunnel (started with a token; configured in the Cloudflare dashboard):
+#   Zero Trust → Networks → Tunnels → <your tunnel> → Public hostnames → Add:
+#   hostname kyomei.kakushin.dev, service HTTP, URL 127.0.0.1:8080. Nothing changes on disk.
+
+tunnel: <TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  # … the rules this tunnel already serves stay here, unchanged …
+
+  - hostname: kyomei.kakushin.dev
+    service: http://127.0.0.1:8080
+    originRequest:
+      httpHostHeader: kyomei.kakushin.dev
+
+  # The existing catch-all must remain the last rule.
+  - service: http_status:404

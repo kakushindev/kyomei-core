@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Source of public/og.png (1200x630). Rendered by scripts/make-og.swift; not part of the site. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Cabin Sketch'; font-weight: 700; src: url('../node_modules/@fontsource/cabin-sketch/files/cabin-sketch-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Patrick Hand'; src: url('../node_modules/@fontsource/patrick-hand/files/patrick-hand-latin-400-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Zen Kurenaido'; src: url('../node_modules/@fontsource/zen-kurenaido/files/zen-kurenaido-90-400-normal.woff2') format('woff2'); unicode-range: U+9CF4; }
+  @font-face { font-family: 'Zen Kurenaido'; src: url('../node_modules/@fontsource/zen-kurenaido/files/zen-kurenaido-110-400-normal.woff2') format('woff2'); unicode-range: U+5171; }
+  html, body { margin: 0; width: 1200px; height: 630px; background: #000; color: #fff; overflow: hidden; }
+  body { position: relative; font-family: 'Patrick Hand', sans-serif; }
+  svg.ink { position: absolute; inset: 0; width: 1200px; height: 630px; }
+  .wordmark { position: absolute; left: 88px; top: 150px; font: 700 188px/1 'Cabin Sketch', sans-serif; letter-spacing: 0.02em; }
+  .macron { position: relative; display: inline-block; }
+  .macron::before, .macron::after { content: ""; position: absolute; left: 16%; right: 14%; top: -0.06em; height: 0.075em; background: currentColor; border-radius: 0.04em; transform: rotate(-2.5deg); }
+  .macron::after { top: -0.015em; left: 22%; right: 20%; height: 0.035em; opacity: 0.7; transform: rotate(1.5deg); }
+  .tagline { position: absolute; left: 94px; top: 372px; font-size: 44px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .line { position: absolute; left: 94px; top: 478px; font-size: 30px; color: #9ca3af; }
+  .by { position: absolute; right: 92px; top: 478px; font-size: 30px; color: #9ca3af; }
+  .by b { color: #fff; font-weight: 400; }
+  .kanji { position: absolute; left: 896px; top: 128px; width: 216px; height: 216px; display: flex; flex-direction: column; align-items: center; justify-content: center; font: 96px/1 'Zen Kurenaido', 'Hiragino Mincho ProN', serif; color: #c8102e; }
+</style>
+</head>
+<body>
+  <svg class="ink" id="ink" viewBox="0 0 1200 630" aria-hidden="true"></svg>
+  <div class="wordmark">KY<span class="macron">O</span>MEI</div>
+  <div class="tagline">Your sound. In harmony.</div>
+  <div class="line">Soundcore earbuds and headphones, native on macOS.</div>
+  <div class="by">by <b>Kakushin</b></div>
+  <div class="kanji" lang="ja"><span>共</span><span>鳴</span></div>
+  <script src="../node_modules/roughjs/bundled/rough.js"></script>
+  <script>
+    const svg = document.getElementById('ink');
+    const rc = rough.svg(svg);
+    const pen = (seed, w = 2.2) => ({ seed, stroke: '#fff', strokeWidth: w, roughness: 1.2, bowing: 1 });
+    svg.appendChild(rc.line(70, 90, 1130, 90, pen(3, 2.2)));
+    svg.appendChild(rc.line(70, 100, 1130, 100, pen(11, 1.6)));
+    svg.appendChild(rc.line(70, 448, 1130, 448, pen(5, 2.2)));
+    svg.appendChild(rc.line(70, 458, 1130, 458, pen(17, 1.6)));
+    svg.appendChild(rc.rectangle(890, 122, 228, 228, {
+      seed: 42, roughness: 2.3, bowing: 1.6, stroke: '#c8102e', strokeWidth: 4,
+      fill: '#c8102e', fillStyle: 'hachure', hachureAngle: 52, hachureGap: 16, fillWeight: 1.1,
+    }));
+    svg.appendChild(rc.line(70, 560, 1130, 560, { ...pen(23, 1.2), stroke: '#555' }));
+    document.fonts.ready.then(() => { document.title = 'ready'; });
+  </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+---
+import { site, nav } from '../site';
+const external = (href: string) => href.startsWith('http');
+---
+<header class="site-header">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3">
+    <a href="/#top" class="flex items-baseline gap-2 no-underline" aria-label={`${site.name} home`}>
+      <span class="kanji text-xl" style="color: var(--ink)" lang="ja" aria-hidden="true">{site.kanji}</span>
+      <span class="wordmark text-2xl" aria-hidden="true">Ky<span class="macron macron-low">o</span>mei</span>
+    </a>
+
+    <nav aria-label="Primary" class="hidden md:block">
+      <ul class="flex items-center gap-1 m-0 p-0 list-none">
+        {nav.map((item) => (
+          <li>
+            <a class="menu-item text-base" href={item.href} {...(external(item.href) ? { rel: 'noopener' } : {})} data-blip>
+              {item.label}{external(item.href) && <span aria-hidden="true"> ↗</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <button
+      type="button"
+      class="menu-item md:hidden"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+      data-mobile-menu-button
+    >Menu</button>
+  </div>
+
+  <div id="mobile-menu" class="md:hidden px-5 pb-4" hidden data-mobile-menu>
+    <div class="dialogue">
+      <p class="speaker" aria-hidden="true">Menu</p>
+      <nav aria-label="Primary (mobile)" class="box sketch menu" data-sketch="double" data-menu>
+        <svg class="hand" viewBox="0 0 32 32" aria-hidden="true" data-hand></svg>
+        <ul class="m-0 flex list-none flex-col items-start gap-1 p-0 pl-10">
+          {nav.map((item) => (
+            <li>
+              <a class="menu-item text-xl" href={item.href} data-menu-item data-close-menu {...(external(item.href) ? { rel: 'noopener' } : {})}>
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  </div>
+  <div class="mx-auto max-w-6xl px-5"><div class="sketch h-3" data-sketch="rule" data-reroll="off" aria-hidden="true"></div></div>
+</header>

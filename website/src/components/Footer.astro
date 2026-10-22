@@ -1,0 +1,33 @@
+---
+import { site, links } from '../site';
+const year = new Date().getFullYear();
+---
+<footer class="mx-auto max-w-6xl px-5 pt-10 pb-14">
+  <div class="sketch mb-8 h-3" data-sketch="rule" data-reroll="off" aria-hidden="true"></div>
+  <div class="flex flex-wrap items-center gap-x-10 gap-y-4">
+    <div class="flex items-center gap-3">
+      <button type="button" class="opt-toggle sketch" data-sketch="box" id="space-toggle" role="switch" aria-checked="false" aria-labelledby="space-label" data-space-toggle>
+        <span class="knob" aria-hidden="true"></span>
+      </button>
+      <label id="space-label" for="space-toggle" class="caps cursor-pointer">White space</label>
+    </div>
+    <div class="flex items-center gap-3">
+      <button type="button" class="opt-toggle sketch" data-sketch="box" id="sfx-toggle" role="switch" aria-checked="false" aria-labelledby="sfx-label" data-sfx-toggle>
+        <span class="knob" aria-hidden="true"></span>
+      </button>
+      <label id="sfx-label" for="sfx-toggle" class="caps cursor-pointer">SFX</label>
+    </div>
+  </div>
+
+  <nav aria-label="Footer" class="mt-8">
+    <ul class="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0">
+      <li><a href={site.organization.url} rel="noopener">Kakushin</a></li>
+      <li><a href={links.repository} rel="noopener">Repository</a></li>
+      <li><a href={links.releases} rel="noopener">Releases</a></li>
+      <li><a href={links.issues} rel="noopener">Issues</a></li>
+      <li><a href={links.license} rel="noopener">License ({site.license})</a></li>
+    </ul>
+  </nav>
+  <p class="dim mt-6 max-w-3xl text-[0.85em]">{site.disclaimer}</p>
+  <p class="dim mt-2 text-[0.85em]">© {year} <a href={site.organization.url} rel="noopener">kakushin.dev</a> · 共鳴 Kyōmei</p>
+</footer>
