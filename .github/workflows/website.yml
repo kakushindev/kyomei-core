@@ -1,7 +1,9 @@
-# Builds and checks the landing page and its Docker image on every change to it. Publishes
-# nothing and deploys nothing: the operator builds and runs the image on the server
-# (docs/DEPLOYMENT.md). Separate from the app release pipeline on purpose; the page reads
-# releases from the public GitHub API at runtime.
+# Builds and checks the landing page and its Docker image on every change to it. On main, when
+# the repository variable WEBSITE_DEPLOY is "true", the tested image is shipped to the server
+# over SSH through the Cloudflare Tunnel and started there by deploy/server/kyomei-deploy.sh,
+# which health-checks it and keeps the previous version running if it fails.
+# No registry, no inbound port, nothing deployed from pull requests. See docs/DEPLOYMENT.md.
+# Separate from the app release pipeline; the page reads releases from the GitHub API at runtime.
 name: Website
 
 on:
@@ -23,6 +25,11 @@ concurrency:
   group: website-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SITE_URL: ${{ vars.WEBSITE_URL || 'https://kyomei.kakushin.dev' }}
+  SITE_REPO: ${{ vars.WEBSITE_GITHUB_REPO || github.repository }}
+  DEPLOYING: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.WEBSITE_DEPLOY == 'true' }}
+
 jobs:
   site:
     name: Lint, test and build
@@ -31,9 +38,6 @@ jobs:
     defaults:
       run:
         working-directory: website
-    env:
-      PUBLIC_SITE_URL: ${{ vars.WEBSITE_URL || 'https://kyomei.kakushin.dev' }}
-      PUBLIC_GITHUB_REPO: ${{ vars.WEBSITE_GITHUB_REPO || github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,6 +53,9 @@ jobs:
         run: npm ci
 
       - name: Lint, type-check, unit tests, build, check dist
+        env:
+          PUBLIC_SITE_URL: ${{ env.SITE_URL }}
+          PUBLIC_GITHUB_REPO: ${{ env.SITE_REPO }}
         run: npm run verify
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -62,6 +69,8 @@ jobs:
     name: Docker image smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      IMAGE: kyomei-web:${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,21 +78,105 @@ jobs:
 
       - name: Build image
         run: |
-          docker build -t kyomei-web:ci \
-            --build-arg PUBLIC_SITE_URL="${{ vars.WEBSITE_URL || 'https://kyomei.kakushin.dev' }}" \
-            --build-arg PUBLIC_GITHUB_REPO="${{ vars.WEBSITE_GITHUB_REPO || github.repository }}" \
+          docker build -t "$IMAGE" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --build-arg PUBLIC_SITE_URL="$SITE_URL" \
+            --build-arg PUBLIC_GITHUB_REPO="$SITE_REPO" \
             website
 
       - name: nginx configuration test
-        run: docker run --rm kyomei-web:ci nginx -t
+        run: docker run --rm "$IMAGE" nginx -t
 
       - name: Run like production and check responses
         run: |
           docker run -d --name kyomei-web -p 127.0.0.1:8080:8080 \
-            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true kyomei-web:ci
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true "$IMAGE"
           for _ in $(seq 1 20); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null && break; sleep 1; done
           website/scripts/smoke-test.sh http://127.0.0.1:8080
 
       - name: Container logs
         if: always()
         run: docker logs kyomei-web 2>&1 | tail -50 || true
+
+      - name: Save the tested image for deployment
+        if: env.DEPLOYING == 'true'
+        run: docker save "$IMAGE" | gzip -1 > kyomei-web.tar.gz && ls -lh kyomei-web.tar.gz
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: env.DEPLOYING == 'true'
+        with:
+          name: kyomei-web-image
+          path: kyomei-web.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  deploy:
+    name: Deploy to the server
+    needs: [site, image]
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      vars.WEBSITE_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.WEBSITE_URL || 'https://kyomei.kakushin.dev' }}
+    concurrency:
+      group: website-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: kyomei-web-image
+
+      - name: SSH through the Cloudflare Tunnel
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          for v in SSH_HOST SSH_USER SSH_KEY SSH_KNOWN_HOSTS; do
+            [ -n "${!v}" ] || { echo "::error::secret DEPLOY_${v} is not set (see docs/DEPLOYMENT.md)"; exit 1; }
+          done
+          install -d -m 700 ~/.ssh
+          (umask 077 && printf '%s\n' "$SSH_KEY" > ~/.ssh/kyomei_deploy)
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # cloudflared runs from its pinned image as the proxy; Access service token variables
+          # are passed through only when set.
+          cat > ~/.ssh/config <<EOF
+          Host kyomei-server
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/kyomei_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ServerAliveInterval 15
+            ProxyCommand docker run --rm -i -e TUNNEL_SERVICE_TOKEN_ID -e TUNNEL_SERVICE_TOKEN_SECRET cloudflare/cloudflared:2026.10.3 access ssh --hostname %h
+          EOF
+          docker pull -q cloudflare/cloudflared:2026.10.3
+
+      - name: Ship and start the image
+        env:
+          CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          if [ -n "$CF_ID" ]; then export TUNNEL_SERVICE_TOKEN_ID="$CF_ID" TUNNEL_SERVICE_TOKEN_SECRET="$CF_SECRET"; fi
+          # shellcheck disable=SC2029 # the sha is meant to expand here, on the runner
+          ssh kyomei-server "deploy $GITHUB_SHA" < kyomei-web.tar.gz
+          ssh kyomei-server status
+
+      - name: Check the public site
+        # A Cloudflare bot challenge can block runners; that is a warning, not a failed deploy.
+        continue-on-error: true
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SITE_URL/healthz")"
+          echo "$SITE_URL/healthz -> $code"
+          [ "$code" = 200 ] || { echo "::warning::$SITE_URL/healthz answered $code"; exit 1; }
+
+      - name: Remove the key
+        if: always()
+        run: rm -f ~/.ssh/kyomei_deploy

@@ -9,7 +9,7 @@ pass() { echo "PASS  $*"; }
 fail() { echo "FAIL  $*"; failures=$((failures + 1)); }
 
 status() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
-header() { curl -sI "$1" | tr -d '\r' | awk -v h="$(echo "$2" | tr 'A-Z' 'a-z')" 'BEGIN{FS=": "} tolower($1)==h {sub(/^[^:]*: /,""); print; exit}'; }
+header() { curl -sI "$1" | tr -d '\r' | awk -v h="$(echo "$2" | tr '[:upper:]' '[:lower:]')" 'BEGIN{FS=": "} tolower($1)==h {sub(/^[^:]*: /,""); print; exit}'; }
 
 check_status() {
   local want="$1" path="$2" got

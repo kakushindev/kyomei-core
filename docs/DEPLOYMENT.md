@@ -1,212 +1,247 @@
 # Deploying the website
 
 The landing page ships as a Docker image: the Astro build served by unprivileged nginx on port
-8080 inside the container. This guide puts it on a VPS at **kyomei-core.asqara.tech**, behind a
-Cloudflare Tunnel that already forwards to `localhost:80`.
+8080 inside the container. This guide puts it on a VPS at **kyomei-core.asqara.tech**, behind the
+Cloudflare Tunnel that already forwards web traffic to `localhost:80`, and lets GitHub Actions
+deploy every change on `main` automatically.
 
 ```
-visitor ──HTTPS──▶ Cloudflare ──tunnel──▶ cloudflared (VPS)
-                                              │ http://localhost:80
-                                              ▼
-                                   host nginx, server_name kyomei-core.asqara.tech
-                                              │ http://127.0.0.1:8080
-                                              ▼
-                                   kyomei-web container (nginx, read-only, non-root)
+ GitHub Actions (on push to main)
+   build → test → smoke-test the image
+   └─ ssh through Cloudflare Tunnel ─▶ VPS: kyomei-deploy (forced command)
+                                           docker load → start → health check → keep or roll back
+
+ visitor ─HTTPS─▶ Cloudflare ─tunnel─▶ cloudflared ─▶ host nginx :80 ─▶ 127.0.0.1:8080 kyomei-web
 ```
 
-No port is opened to the internet: cloudflared dials out to Cloudflare, nginx and the container
-listen on the VPS only.
+- No registry and no registry credentials: the tested image is streamed over SSH.
+- No inbound port: SSH and the website both arrive through the tunnel.
+- The deploy key can only run `kyomei-deploy` (deploy, rollback, status). No shell, no
+  forwarding, even if the key leaks.
+- A deploy that fails its health check never replaces the running site.
+- Nothing deploys from pull requests.
 
-## 0. What the VPS needs
+You do this setup once. After that, every merge to `main` that touches `website/` goes live by
+itself.
 
-- Linux (commands below are for Debian/Ubuntu), 512 MB RAM free, about 1 GB disk for images
-- Docker Engine with the Compose plugin: <https://docs.docker.com/engine/install/>
-  (`docker compose version` must work)
-- nginx on the host, listening on port 80 (`sudo apt install nginx` if it is not there yet)
-- cloudflared running as your existing tunnel, forwarding to `http://localhost:80`
-- `git`
+---
 
-Check:
+## 1. On the VPS: Docker and the host nginx
+
+Needed: Docker Engine (<https://docs.docker.com/engine/install/>), nginx on port 80, and
+cloudflared as your existing tunnel. Check:
 
 ```bash
-docker compose version && nginx -v && systemctl is-active cloudflared
+docker version --format '{{.Server.Version}}' && nginx -v && systemctl is-active cloudflared
+sudo systemctl enable docker      # containers come back after a reboot
 ```
 
-## 1. Get the code onto the VPS
+Put these two files from this repository on the server. Upload them with the app you already
+use for SSH (most have SFTP), or with `scp` (section 8 shows an SSH config for the tunnel):
 
-The repository is private, so give the VPS a **read-only deploy key** (it can read this one
-repository and nothing else).
+- `deploy/nginx/kyomei-core.asqara.tech.conf`
+- `deploy/server/kyomei-deploy.sh`
 
-On the VPS:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/kyomei_deploy -N "" -C "kyomei-core deploy (VPS)"
-cat ~/.ssh/kyomei_deploy.pub
-```
-
-On GitHub: **kakushindev/kyomei-core → Settings → Deploy keys → Add deploy key**, paste the
-public key, leave **Allow write access** unchecked.
-
-Back on the VPS:
+Then, assuming you uploaded them to `/tmp`:
 
 ```bash
-cat >> ~/.ssh/config <<'EOF'
-Host github-kyomei
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/kyomei_deploy
-  IdentitiesOnly yes
-EOF
-sudo mkdir -p /opt/kyomei && sudo chown "$USER" /opt/kyomei
-git clone github-kyomei:kakushindev/kyomei-core.git /opt/kyomei
-```
-
-(If the repository becomes public, a plain `git clone https://github.com/kakushindev/kyomei-core.git /opt/kyomei` is enough.)
-
-## 2. Configure
-
-Build settings live in `website/.env`, which Compose reads automatically and git ignores:
-
-```bash
-cat > /opt/kyomei/website/.env <<'EOF'
-PUBLIC_SITE_URL=https://kyomei-core.asqara.tech
-PUBLIC_GITHUB_REPO=kakushindev/kyomei-core
-KYOMEI_WEB_PORT=8080
-EOF
-```
-
-- `PUBLIC_SITE_URL` goes into the canonical URL, Open Graph tags and the sitemap.
-- `PUBLIC_GITHUB_REPO` is where the download button looks for the latest release.
-- `KYOMEI_WEB_PORT` is the loopback port on the VPS. If something already uses 8080 (check with
-  `sudo ss -ltnp | grep :8080`), pick another and change `proxy_pass` in step 4 to match.
-
-## 3. Build and start the container
-
-```bash
-cd /opt/kyomei/website
-docker compose up -d --build
-docker compose ps          # STATUS should read "Up … (healthy)" after a few seconds
-./scripts/smoke-test.sh http://127.0.0.1:8080
-```
-
-The build runs the site's unit tests and dist checks; if any fail, no image is produced and the
-running site stays as it was. The smoke test should end with `all checks passed`.
-
-The container restarts on its own after a reboot (`restart: unless-stopped`) as long as the
-Docker service is enabled: `sudo systemctl enable docker`.
-
-## 4. Host nginx: route the domain to the container
-
-```bash
-sudo cp /opt/kyomei/deploy/nginx/kyomei-core.asqara.tech.conf /etc/nginx/sites-available/
+# Host nginx: route the domain to the container
+sudo mv /tmp/kyomei-core.asqara.tech.conf /etc/nginx/sites-available/
 sudo ln -s /etc/nginx/sites-available/kyomei-core.asqara.tech.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
+
+# The deploy command, owned by root so the deploy user cannot change it
+sudo install -o root -g root -m 755 /tmp/kyomei-deploy.sh /usr/local/bin/kyomei-deploy
 ```
 
-(On distributions without `sites-available`, copy the file into `/etc/nginx/conf.d/` instead.)
+(Without `sites-available`, put the nginx file in `/etc/nginx/conf.d/` instead.)
 
-Test it on the VPS, the same way cloudflared will ask:
+The container will listen on `127.0.0.1:8080`. If 8080 is taken (`sudo ss -ltnp | grep :8080`),
+pick another port, change `proxy_pass` in the nginx file, and see the note in step 2.
+
+## 2. On the VPS: a deploy user that can only deploy
 
 ```bash
-curl -sI -H "Host: kyomei-core.asqara.tech" http://localhost/ | head -5
+sudo adduser --disabled-password --gecos "" kyomei-deploy
+sudo usermod -aG docker kyomei-deploy
+sudo install -d -o kyomei-deploy -g kyomei-deploy -m 700 /home/kyomei-deploy/.ssh
 ```
 
-Expect `HTTP/1.1 200 OK` and a `Content-Security-Policy` header. A different page or a 404 from
-nginx means another `server` block answered; check `server_name` and `sudo nginx -T | grep -n server_name`.
+Being in the `docker` group is as powerful as root, which is why this user's key is locked to
+one command in the next step.
 
-## 5. Cloudflare Tunnel: add the hostname
+## 3. A key for GitHub Actions
 
-Your tunnel already forwards to `localhost:80`. It still needs to know this hostname, and DNS
-needs to point the name at the tunnel. Pick the way your tunnel is managed:
-
-**Dashboard (tunnel started with a token):**
-Cloudflare Zero Trust → **Networks → Tunnels** → your tunnel → **Public hostname → Add a public hostname**
-
-- Subdomain `kyomei-core`, domain `asqara.tech`
-- Service type `HTTP`, URL `localhost:80`
-- Save. Cloudflare creates the DNS record for you.
-
-**Config file (`/etc/cloudflared/config.yml`):** add one rule above the catch-all, keep the rest:
-
-```yaml
-ingress:
-  # … existing rules …
-  - hostname: kyomei-core.asqara.tech
-    service: http://localhost:80
-  - service: http_status:404
-```
-
-Then:
+On your Mac (or any machine):
 
 ```bash
-cloudflared tunnel ingress validate
-cloudflared tunnel route dns <your-tunnel-name> kyomei-core.asqara.tech
-sudo systemctl restart cloudflared
+ssh-keygen -t ed25519 -f ~/kyomei_actions -N "" -C "github-actions kyomei-core"
+cat ~/kyomei_actions.pub
 ```
 
-If the tunnel already has a wildcard rule such as `*.asqara.tech → http://localhost:80`, only the
-DNS record is missing: add a proxied `CNAME kyomei-core → <tunnel-id>.cfargotunnel.com`.
-
-Do not set `httpHostHeader` to another name on this rule: nginx picks the site by the Host header.
-
-## 6. Check from outside
+On the VPS, allow that public key for `kyomei-deploy`, **only** for the deploy command. Use one
+line, with your key in place of `ssh-ed25519 AAAA…`:
 
 ```bash
-curl -sI https://kyomei-core.asqara.tech | head -8
+echo 'restrict,command="/usr/local/bin/kyomei-deploy" ssh-ed25519 AAAA…your-key… github-actions kyomei-core' \
+  | sudo tee /home/kyomei-deploy/.ssh/authorized_keys
+sudo chown kyomei-deploy:kyomei-deploy /home/kyomei-deploy/.ssh/authorized_keys
+sudo chmod 600 /home/kyomei-deploy/.ssh/authorized_keys
 ```
 
-Then open <https://kyomei-core.asqara.tech> in a browser. The **Download** section shows the
-latest release from GitHub. While the repository is **private** it shows "There is no stable
-release yet": the page asks the public GitHub API without a token, and the API answers 404 for
-private repositories. It finds the release as soon as the repository is public.
+Another port than 8080? Write `command="KYOMEI_WEB_PORT=8081 /usr/local/bin/kyomei-deploy"`.
 
-## 7. Firewall
+The private key (`~/kyomei_actions`, the file without `.pub`) goes into GitHub in step 6. After
+that, delete it from your Mac: `rm ~/kyomei_actions ~/kyomei_actions.pub`.
 
-Nothing here needs an inbound port. Keep 80 and 8080 closed to the internet, for example with ufw:
+## 4. The server's host key
+
+GitHub Actions refuses to connect unless it knows the server's identity in advance. On the VPS,
+with your SSH hostname (the one your SSH app uses through the tunnel, e.g. `ssh.asqara.tech`):
 
 ```bash
-sudo ufw default deny incoming
-sudo ufw allow OpenSSH        # or your SSH port
-sudo ufw enable
+awk -v h=ssh.asqara.tech '{print h, $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-Docker writes its own iptables rules and bypasses ufw for published ports. That is why
-`compose.yaml` publishes the container on `127.0.0.1` only. Keep it that way.
+The output line (`ssh.asqara.tech ssh-ed25519 AAAA…`) is the secret `DEPLOY_SSH_KNOWN_HOSTS`.
 
-## Updating
+## 5. Cloudflare
 
-```bash
-cd /opt/kyomei && git pull
-cd website
-docker tag kyomei-web:latest kyomei-web:previous   # keep the running version for a rollback
-docker compose up -d --build
-./scripts/smoke-test.sh http://127.0.0.1:8080
-```
+**Website hostname.** Your tunnel already forwards to `localhost:80`; it needs this hostname too.
+Zero Trust → **Networks → Tunnels** → your tunnel → **Public hostname → Add**:
+subdomain `kyomei-core`, domain `asqara.tech`, type `HTTP`, URL `localhost:80`. Cloudflare
+creates the DNS record. (Config-file tunnels: add
+`- hostname: kyomei-core.asqara.tech` / `service: http://localhost:80` above the catch-all, then
+`cloudflared tunnel route dns <tunnel> kyomei-core.asqara.tech` and restart cloudflared.)
+
+**SSH hostname.** GitHub Actions connects the way your SSH app does: through a tunnel public
+hostname whose service is `ssh://localhost:22`, using `cloudflared access ssh`. If you already
+have one, use it. If not, add a public hostname such as `ssh.asqara.tech`, type `SSH`, URL
+`localhost:22`.
+
+If that SSH hostname is protected by **Cloudflare Access** (you log in through a browser before
+SSH works), automation needs a service token:
+
+1. Zero Trust → **Access → Service auth → Create service token**. Copy the Client ID and Client
+   Secret (the secret is shown once).
+2. Open the Access application for the SSH hostname → **Policies → Add a policy**, action
+   **Service Auth**, include **Service Token** = the token you just made.
+3. Store them as `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` in step 6.
+
+No Access application on the SSH hostname? Skip this; the SSH key alone protects it.
+
+## 6. GitHub: secrets and variables
+
+Repository → **Settings → Secrets and variables → Actions**.
+
+**Secrets** tab → *New repository secret*:
+
+| Name | Value |
+| --- | --- |
+| `DEPLOY_SSH_HOST` | your SSH hostname, e.g. `ssh.asqara.tech` |
+| `DEPLOY_SSH_USER` | `kyomei-deploy` |
+| `DEPLOY_SSH_KEY` | the whole private key file from step 3, including the `-----BEGIN…` and `-----END…` lines |
+| `DEPLOY_SSH_KNOWN_HOSTS` | the line from step 4 |
+| `CF_ACCESS_CLIENT_ID` | only with Cloudflare Access (step 5) |
+| `CF_ACCESS_CLIENT_SECRET` | only with Cloudflare Access (step 5) |
+
+**Variables** tab → *New repository variable*:
+
+| Name | Value |
+| --- | --- |
+| `WEBSITE_URL` | `https://kyomei-core.asqara.tech` |
+| `WEBSITE_DEPLOY` | `true` (set this last; until then nothing is deployed) |
+
+Optional: **Settings → Environments → production** appears after the first deploy. There you can
+require an approval before each deploy, or move the secrets above into the environment so only
+the deploy job can read them.
+
+## 7. First deploy
+
+**Actions → Website → Run workflow** (branch `main`). The jobs:
+
+1. *Lint, test and build*: site checks.
+2. *Docker image smoke test*: builds the image with `WEBSITE_URL` baked in and tests it.
+3. *Deploy to the server*: SSH through the tunnel, `kyomei-deploy deploy <commit>`, then
+   `status`, then a request to `https://kyomei-core.asqara.tech/healthz`.
+
+From then on it runs on every push to `main` that changes `website/`. Changes elsewhere (the app,
+docs) do not redeploy the site.
+
+On the server you can watch it with `docker ps` and `docker logs kyomei-web`.
 
 ## Rolling back
 
+From your own SSH login on the VPS (a user in the `docker` group, or with `sudo`):
+
 ```bash
-cd /opt/kyomei/website
-KYOMEI_WEB_TAG=previous docker compose up -d --no-build
+sudo -u kyomei-deploy kyomei-deploy status
+sudo -u kyomei-deploy kyomei-deploy rollback     # run again to roll forward
 ```
 
-Back to the newest build later with `docker compose up -d --no-build`.
+Or redeploy an older commit: open its *Website* run in Actions → **Re-run jobs** (the tested
+images are kept for 7 days).
 
-## Without a host nginx
+## 8. SSH from your Mac through the tunnel (optional)
 
-If nothing else on the VPS uses port 80, the container can take it directly and step 4 is not
-needed. Set `KYOMEI_WEB_PORT=80` in `website/.env` and run `docker compose up -d`. The container
-answers any Host header, so the tunnel rule from step 5 is all it needs.
+To use `scp` or `ssh` from a terminal instead of an app: `brew install cloudflared`, then add to
+`~/.ssh/config`:
+
+```
+Host kyomei-vps
+  HostName ssh.asqara.tech
+  User <your-user>
+  ProxyCommand cloudflared access ssh --hostname %h
+```
+
+Now `scp deploy/server/kyomei-deploy.sh deploy/nginx/kyomei-core.asqara.tech.conf kyomei-vps:/tmp/`
+and `ssh kyomei-vps` work.
+
+## Firewall
+
+Nothing needs an inbound port. Keep 22, 80 and 8080 closed to the internet if all access goes
+through the tunnel. Make sure the tunnel SSH works first so you do not lock yourself out:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw enable
+```
+
+Docker writes its own iptables rules and bypasses ufw for published ports; that is why the
+container is published on `127.0.0.1` only.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
-| Cloudflare error 1033 | cloudflared is not running or not connected | `systemctl status cloudflared`, `journalctl -u cloudflared -n 50` |
-| 502 Bad Gateway | container down or on another port | `docker compose ps`, `docker compose logs --tail 50` |
-| Another site's page | nginx `server_name` did not match | step 4 test with the Host header |
-| Download says no release | repository private, or no published release | `curl -s -o /dev/null -w '%{http_code}' https://api.github.com/repos/kakushindev/kyomei-core/releases/latest` |
-| Old page after an update | browser cache | HTML is sent with `Cache-Control: no-cache`; hard reload. Assets have new names per build |
+| Deploy job: `secret DEPLOY_… is not set` | a secret from step 6 is missing | names are case-sensitive |
+| `Host key verification failed` | `DEPLOY_SSH_KNOWN_HOSTS` hostname or key does not match | the line must start with exactly `DEPLOY_SSH_HOST` |
+| `Permission denied (publickey)` | key not in `authorized_keys`, or wrong user | step 3; `sudo tail /var/log/auth.log` |
+| `websocket: bad handshake` / Access login page | SSH hostname is behind Access without a service token | step 5 |
+| `unknown command` from kyomei-deploy | someone tried a shell over the deploy key | expected; the key is restricted |
+| `deploy of … failed`, site still up | new image failed its health check; old one kept | the job log shows the container's last lines |
+| Cloudflare 502 | container down, or nginx points at another port | `docker ps`, `curl -sI -H 'Host: kyomei-core.asqara.tech' http://localhost/` |
+| Download says no release | the repository is private: the page asks the public GitHub API, which answers 404 for private repos | works once the repository is public |
+| Final `healthz` check warns, deploy is green | Cloudflare bot protection challenged the runner | open the site yourself |
 
-Logs: `docker compose logs -f` (the container; visitor addresses come from Cloudflare's
-`CF-Connecting-IP`) and `/var/log/nginx/kyomei-core.*.log` (host nginx).
+---
+
+## Alternative: deploy by hand with Docker Compose
+
+Without CI, on the VPS, with the repository cloned (private repository: add a read-only deploy
+key under **Settings → Deploy keys** and clone with it):
+
+```bash
+cd /opt/kyomei/website
+printf 'PUBLIC_SITE_URL=https://kyomei-core.asqara.tech\nKYOMEI_WEB_PORT=8080\n' > .env
+docker compose up -d --build
+./scripts/smoke-test.sh http://127.0.0.1:8080
+```
+
+Update: `git pull && docker tag kyomei-web:latest kyomei-web:previous && docker compose up -d --build`.
+Roll back: `KYOMEI_WEB_TAG=previous docker compose up -d --no-build`.
+
+Use one method, not both: they run the same container name and port.
+
+If nothing else on the VPS uses port 80, the container can take it directly (`KYOMEI_WEB_PORT=80`,
+or `command="KYOMEI_WEB_PORT=80 …"` for CI) and the host nginx is not needed.
