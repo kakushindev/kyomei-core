@@ -120,7 +120,8 @@ cd website && docker compose up -d --build  # nginx container on 127.0.0.1:8080
 The container runs unprivileged nginx with a strict Content-Security-Policy and a read-only
 filesystem. Point the existing Cloudflare Tunnel at `http://127.0.0.1:8080`; see
 `deploy/cloudflared/config.example.yml`. Check a running container with
-`website/scripts/smoke-test.sh http://127.0.0.1:8080`.
+`website/scripts/smoke-test.sh http://127.0.0.1:8080`. Step-by-step VPS guide (Docker, host nginx,
+Cloudflare Tunnel): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## How it works
 
